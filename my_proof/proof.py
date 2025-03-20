@@ -47,27 +47,17 @@ class Proof:
         else:
             logging.info("Skipping blockchain validation")
 
-        # Log the files we'll be processing
-        input_files = os.listdir(settings.INPUT_DIR)
-        logging.info(
-            f"Found {len(input_files)} files in input directory: {input_files}"
-        )
+        # Process all files in the input directory, including those in subdirectories
         processed_count = 0
+        json_files = self._find_json_files(settings.INPUT_DIR)
+        logging.info(f"Found {len(json_files)} JSON files in input directory")
 
         # Iterate through files and calculate data validity
-        for input_filename in input_files:
-            logging.info(f"Checking file: {input_filename}")
-            input_file = os.path.join(settings.INPUT_DIR, input_filename)
-
-            # Skip directories
-            if os.path.isdir(input_file):
-                logging.info(f"Skipping directory: {input_filename}")
-                continue
-
-            file_extension = os.path.splitext(input_file)[1].lower()
-            if file_extension == ".json":
-                processed_count += 1
-                logging.info(f"Processing JSON file: {input_filename}")
+        for input_file in json_files:
+            input_filename = os.path.basename(input_file)
+            logging.info(f"Processing JSON file: {input_file}")
+            
+            try:
                 with open(input_file, "r") as f:
                     json_content = f.read()
                     logging.info(f"Validating file: {json_content[:50]}...")
@@ -124,14 +114,12 @@ class Proof:
                     }
 
                     self.proof_response.valid = len(errors) == 0
-            else:
-                logging.info(
-                    f"Skipping non-JSON file: {input_filename} (extension: {file_extension})"
-                )
+                    processed_count += 1
+            except Exception as e:
+                logging.error(f"Error processing JSON file {input_file}: {str(e)}")
+                errors.append(f"PROCESSING_ERROR")
 
-        logging.info(
-            f"Processed {processed_count} JSON files out of {len(input_files)} total files"
-        )
+        logging.info(f"Processed {processed_count} JSON files")
 
         # Only include errors if there are any
         if len(errors) > 0:
@@ -139,6 +127,26 @@ class Proof:
             self.proof_response.attributes["errors"] = errors
 
         return self.proof_response
+        
+    def _find_json_files(self, directory):
+        """
+        Recursively find all JSON files in the given directory and its subdirectories.
+        
+        Args:
+            directory: The directory to search in
+            
+        Returns:
+            list: A list of paths to JSON files
+        """
+        json_files = []
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.lower().endswith('.json'):
+                    json_files.append(os.path.join(root, file))
+                    logging.info(f"Found JSON file: {os.path.join(root, file)}")
+                else:
+                    logging.info(f"Skipping non-JSON file: {os.path.join(root, file)}")
+        return json_files
 
     def _verify_profile_match(self, google_user, input_data):
         """
